@@ -1,12 +1,21 @@
+-- ============================================================
+-- PRICINGDB - Optum Pharmacy Pricing System
+-- Days 1-3: Schema, Data, Queries, Stored Procedures, 
+--           Indexes, Views, Trigger
+-- Author: Sai Teja Reddy Yeldandi
+-- ============================================================
+
+-- ============================================================
+-- STEP 1: CREATE DATABASE
+-- ============================================================
 CREATE DATABASE PricingDB;
 GO
 USE PricingDB;
 GO
 
-
-USE PricingDB;
-GO
-
+-- ============================================================
+-- STEP 2: CREATE TABLES
+-- ============================================================
 CREATE TABLE Products (
   ProductID   INT PRIMARY KEY IDENTITY(1,1),
   ProductName NVARCHAR(200) NOT NULL,
@@ -50,33 +59,38 @@ CREATE TABLE Transactions (
   TxnDate    DATETIME DEFAULT GETDATE()
 );
 
-
-USE PricingDB;
+CREATE TABLE PriceAuditLog (
+  AuditID    INT PRIMARY KEY IDENTITY(1,1),
+  PricingID  INT,
+  OldPrice   DECIMAL(10,2),
+  NewPrice   DECIMAL(10,2),
+  ChangedAt  DATETIME DEFAULT GETDATE()
+);
 GO
 
--- Insert Products
+-- ============================================================
+-- STEP 3: INSERT SAMPLE DATA
+-- ============================================================
 INSERT INTO Products (ProductName, Category, BasePrice) VALUES
-('Lipitor 10mg',    'Cholesterol',  45.99),
-('Metformin 500mg', 'Diabetes',     12.50),
-('Lisinopril 5mg',  'Blood Pressure', 8.75),
-('Atorvastatin',    'Cholesterol',  38.00),
-('Amoxicillin',     'Antibiotic',   15.25),
-('Omeprazole',      'Gastric',      22.00),
-('Sertraline',      'Mental Health', 30.00),
+('Lipitor 10mg',    'Cholesterol',    45.99),
+('Metformin 500mg', 'Diabetes',       12.50),
+('Lisinopril 5mg',  'Blood Pressure',  8.75),
+('Atorvastatin',    'Cholesterol',    38.00),
+('Amoxicillin',     'Antibiotic',     15.25),
+('Omeprazole',      'Gastric',        22.00),
+('Sertraline',      'Mental Health',  30.00),
 ('Amlodipine',      'Blood Pressure', 11.00);
 
--- Insert Customers
 INSERT INTO Customers (CustomerName, Tier, Region) VALUES
-('Cigna Health',      'Platinum', 'Northeast'),
-('Aetna Insurance',   'Gold',     'Southeast'),
-('BlueCross IL',      'Gold',     'Midwest'),
-('Humana Plans',      'Silver',   'South'),
-('UnitedHealth',      'Platinum', 'National'),
-('CVS Caremark',      'Gold',     'National'),
-('Express Scripts',   'Platinum', 'National'),
-('Anthem Inc',        'Silver',   'West');
+('Cigna Health',    'Platinum', 'Northeast'),
+('Aetna Insurance', 'Gold',     'Southeast'),
+('BlueCross IL',    'Gold',     'Midwest'),
+('Humana Plans',    'Silver',   'South'),
+('UnitedHealth',    'Platinum', 'National'),
+('CVS Caremark',    'Gold',     'National'),
+('Express Scripts', 'Platinum', 'National'),
+('Anthem Inc',      'Silver',   'West');
 
--- Insert Pricing
 INSERT INTO Pricing (ProductID, CustomerID, NegotiatedPrice, EffectiveDate, ExpiryDate) VALUES
 (1, 1, 38.00, '2025-01-01', '2025-12-31'),
 (1, 2, 40.00, '2025-01-01', '2025-12-31'),
@@ -87,20 +101,18 @@ INSERT INTO Pricing (ProductID, CustomerID, NegotiatedPrice, EffectiveDate, Expi
 (6, 7, 18.00, '2025-01-01', '2025-12-31'),
 (7, 8, 25.00, '2025-01-01', '2025-12-31');
 
--- Insert Transactions
 INSERT INTO Transactions (ProductID, CustomerID, Quantity, UnitPrice, TxnDate) VALUES
-(1, 1, 500,  38.00, '2025-03-01'),
-(1, 2, 300,  40.00, '2025-03-05'),
+(1, 1,  500, 38.00, '2025-03-01'),
+(1, 2,  300, 40.00, '2025-03-05'),
 (2, 3, 1000, 10.00, '2025-03-07'),
-(3, 4, 750,   7.50, '2025-03-10'),
-(4, 5, 400,  30.00, '2025-03-12'),
-(5, 6, 600,  12.00, '2025-03-15'),
-(6, 7, 200,  18.00, '2025-03-18'),
-(7, 8, 350,  25.00, '2025-03-20'),
-(1, 5, 450,  35.00, '2025-04-01'),
-(2, 1, 800,   9.50, '2025-04-05');
+(3, 4,  750,  7.50, '2025-03-10'),
+(4, 5,  400, 30.00, '2025-03-12'),
+(5, 6,  600, 12.00, '2025-03-15'),
+(6, 7,  200, 18.00, '2025-03-18'),
+(7, 8,  350, 25.00, '2025-03-20'),
+(1, 5,  450, 35.00, '2025-04-01'),
+(2, 1,  800,  9.50, '2025-04-05');
 
--- Insert Bids
 INSERT INTO Bids (ProductID, CustomerID, BidAmount, Status) VALUES
 (1, 1, 36.00, 'Won'),
 (1, 2, 41.00, 'Lost'),
@@ -110,18 +122,18 @@ INSERT INTO Bids (ProductID, CustomerID, BidAmount, Status) VALUES
 (5, 6, 13.00, 'Lost'),
 (6, 7, 17.50, 'Won'),
 (7, 8, 26.00, 'Lost');
-
-
-
-USE PricingDB;
 GO
 
--- 1. Basic: All products with their base price
+-- ============================================================
+-- STEP 4: CORE QUERIES
+-- ============================================================
+
+-- 1. All products by base price
 SELECT ProductName, Category, BasePrice
 FROM Products
 ORDER BY BasePrice DESC;
 
--- 2. JOIN: Negotiated price vs base price per customer
+-- 2. Negotiated price vs base price per customer
 SELECT 
   c.CustomerName, c.Tier,
   p.ProductName,
@@ -129,11 +141,11 @@ SELECT
   pr.NegotiatedPrice,
   p.BasePrice - pr.NegotiatedPrice AS Discount
 FROM Pricing pr
-JOIN Products p  ON pr.ProductID  = p.ProductID
+JOIN Products  p ON pr.ProductID  = p.ProductID
 JOIN Customers c ON pr.CustomerID = c.CustomerID
 ORDER BY Discount DESC;
 
--- 3. GROUP BY: Total revenue per product
+-- 3. Total revenue per product
 SELECT 
   p.ProductName,
   SUM(t.Quantity * t.UnitPrice) AS TotalRevenue,
@@ -143,7 +155,7 @@ JOIN Products p ON t.ProductID = p.ProductID
 GROUP BY p.ProductName
 ORDER BY TotalRevenue DESC;
 
--- 4. WINDOW FUNCTION: Rank customers by total spend
+-- 4. Rank customers by total spend (window function)
 SELECT 
   c.CustomerName,
   SUM(t.Quantity * t.UnitPrice) AS TotalSpend,
@@ -153,7 +165,7 @@ JOIN Customers c ON t.CustomerID = c.CustomerID
 GROUP BY c.CustomerName
 ORDER BY SpendRank;
 
--- 5. CTE: Customers spending above average
+-- 5. Customers above average spend (CTE)
 WITH CustomerSpend AS (
   SELECT 
     c.CustomerName,
@@ -162,20 +174,18 @@ WITH CustomerSpend AS (
   JOIN Customers c ON t.CustomerID = c.CustomerID
   GROUP BY c.CustomerName
 )
-SELECT *, 
-  CASE WHEN TotalSpend > (SELECT AVG(TotalSpend) FROM CustomerSpend) 
-       THEN 'Above Average' 
+SELECT *,
+  CASE WHEN TotalSpend > (SELECT AVG(TotalSpend) FROM CustomerSpend)
+       THEN 'Above Average'
        ELSE 'Below Average' END AS SpendCategory
 FROM CustomerSpend
 ORDER BY TotalSpend DESC;
-
-
-
-
-USE PricingDB;
 GO
 
--- 1. Insert a new pricing record
+-- ============================================================
+-- STEP 5: STORED PROCEDURES
+-- ============================================================
+
 CREATE PROCEDURE usp_InsertPricing
   @ProductID INT, @CustomerID INT,
   @Price DECIMAL(10,2), @Start DATE, @End DATE
@@ -186,7 +196,6 @@ AS BEGIN
 END
 GO
 
--- 2. Get top N bids by value
 CREATE PROCEDURE usp_GetTopBids
   @TopN INT = 10
 AS BEGIN
@@ -200,7 +209,6 @@ AS BEGIN
 END
 GO
 
--- 3. Calculate discount for a customer+product
 CREATE PROCEDURE usp_GetDiscount
   @ProductID INT, @CustomerID INT
 AS BEGIN
@@ -216,7 +224,6 @@ AS BEGIN
 END
 GO
 
--- 4. Get bid win rate per customer
 CREATE PROCEDURE usp_BidWinRate
 AS BEGIN
   SELECT
@@ -231,14 +238,6 @@ AS BEGIN
 END
 GO
 
--- 5. Audit log table + update price procedure
-CREATE TABLE PriceAuditLog (
-  AuditID    INT PRIMARY KEY IDENTITY(1,1),
-  PricingID  INT, OldPrice DECIMAL(10,2),
-  NewPrice   DECIMAL(10,2), ChangedAt DATETIME DEFAULT GETDATE()
-);
-GO
-
 CREATE PROCEDURE usp_UpdatePrice
   @PricingID INT, @NewPrice DECIMAL(10,2)
 AS BEGIN
@@ -251,29 +250,93 @@ AS BEGIN
 END
 GO
 
+-- ============================================================
+-- STEP 6: INDEXES
+-- ============================================================
+CREATE INDEX IX_Pricing_ProductID     ON Pricing(ProductID);
+CREATE INDEX IX_Pricing_CustomerID    ON Pricing(CustomerID);
+CREATE INDEX IX_Transactions_Product  ON Transactions(ProductID);
+CREATE INDEX IX_Transactions_Customer ON Transactions(CustomerID);
+CREATE INDEX IX_Bids_Status           ON Bids(Status);
+
+CREATE INDEX IX_Pricing_Cover
+ON Pricing(ProductID, CustomerID)
+INCLUDE (NegotiatedPrice, EffectiveDate, ExpiryDate);
+GO
+
+-- ============================================================
+-- STEP 7: VIEWS
+-- ============================================================
+CREATE VIEW vw_MonthlyPricingSummary AS
+SELECT 
+    MONTH(TxnDate) AS TxnMonth,
+    YEAR(TxnDate)  AS TxnYear,
+    p.ProductName,
+    AVG(t.UnitPrice) AS AvgPrice,
+    MAX(t.UnitPrice) AS MaxPrice,
+    MIN(t.UnitPrice) AS MinPrice,
+    SUM(t.Quantity * t.UnitPrice) AS TotalRevenue
+FROM Transactions t
+JOIN Products p ON t.ProductID = p.ProductID
+GROUP BY MONTH(TxnDate), YEAR(TxnDate), p.ProductName;
+GO
+
+CREATE VIEW vw_CustomerTierAnalysis AS
+SELECT 
+    c.CustomerName, c.Tier, c.Region,
+    COUNT(t.TxnID) AS TotalTransactions,
+    SUM(t.Quantity * t.UnitPrice) AS TotalSpend,
+    AVG(t.Quantity * t.UnitPrice) AS AvgTransactionValue
+FROM Customers c
+LEFT JOIN Transactions t ON c.CustomerID = t.CustomerID
+GROUP BY c.CustomerName, c.Tier, c.Region;
+GO
+
+CREATE VIEW vw_BidWinRate AS
+SELECT 
+    p.ProductName, p.Category,
+    COUNT(b.BidID) AS TotalBids,
+    SUM(CASE WHEN b.Status = 'Won' THEN 1 ELSE 0 END) AS WonBids,
+    ROUND(CAST(SUM(CASE WHEN b.Status = 'Won' THEN 1 ELSE 0 END) AS FLOAT)
+        / COUNT(b.BidID) * 100, 1) AS WinRatePct
+FROM Bids b
+JOIN Products p ON b.ProductID = p.ProductID
+GROUP BY p.ProductName, p.Category;
+GO
+
+-- ============================================================
+-- STEP 8: AUDIT TRIGGER
+-- ============================================================
+CREATE TRIGGER trg_PriceAudit
+ON Pricing
+AFTER UPDATE
+AS BEGIN
+  SET NOCOUNT ON;
+  INSERT INTO PriceAuditLog(PricingID, OldPrice, NewPrice)
+  SELECT i.PricingID, d.NegotiatedPrice, i.NegotiatedPrice
+  FROM inserted i
+  JOIN deleted d ON i.PricingID = d.PricingID
+  WHERE i.NegotiatedPrice <> d.NegotiatedPrice;
+  PRINT 'Audit log updated automatically';
+END
+GO
+
+-- ============================================================
+-- STEP 9: TEST EVERYTHING
+-- ============================================================
 EXEC usp_GetTopBids 5;
 EXEC usp_GetDiscount 1, 1;
 EXEC usp_BidWinRate;
 
+SELECT * FROM vw_MonthlyPricingSummary;
+SELECT * FROM vw_CustomerTierAnalysis;
+SELECT * FROM vw_BidWinRate;
 
-USE PricingDB;
-GO
+-- Test trigger
+UPDATE Pricing SET NegotiatedPrice = 36.50 WHERE PricingID = 1;
+SELECT * FROM PriceAuditLog;
 
--- Speed up joins on foreign keys
-CREATE INDEX IX_Pricing_ProductID    ON Pricing(ProductID);
-CREATE INDEX IX_Pricing_CustomerID   ON Pricing(CustomerID);
-CREATE INDEX IX_Transactions_Product ON Transactions(ProductID);
-CREATE INDEX IX_Transactions_Customer ON Transactions(CustomerID);
-CREATE INDEX IX_Bids_Status          ON Bids(Status);
-
--- Covering index for the discount query
-CREATE INDEX IX_Pricing_Cover 
-ON Pricing(ProductID, CustomerID) 
-INCLUDE (NegotiatedPrice, EffectiveDate, ExpiryDate);
-GO
-
-
--- Check your indexes were created
+-- Verify indexes
 SELECT 
   i.name AS IndexName,
   t.name AS TableName,
