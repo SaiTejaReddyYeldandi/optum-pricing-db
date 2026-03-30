@@ -191,6 +191,11 @@ git push
 copy "C:\Users\91852\Downloads\filename.sql" "C:\path\to\optum-pricing-db\"
 ```
 
+git add .                    # stage changes
+git commit -m "message"      # save changes locally
+git pull --rebase            # sync with GitHub
+git push                     # upload to GitHub
+
 ### List files in folder (Windows CMD — not ls)
 ```bash
 dir
