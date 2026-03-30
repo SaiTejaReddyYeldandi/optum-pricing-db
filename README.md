@@ -175,8 +175,8 @@ END
 
 **ETL results:**
 ```
-Inserted 500 rows into Products      — 0 nulls, 0 dupes
-Inserted 200 rows into Customers     — 0 nulls, 0 dupes
+Inserted 500 rows into Products        — 0 nulls, 0 dupes
+Inserted 200 rows into Customers       — 0 nulls, 0 dupes
 Inserted 100000 rows into Transactions — 0 nulls, 0 dupes
 Total time: 7 seconds
 ```
@@ -271,26 +271,69 @@ dir
 ```
 
 **Why `git pull --rebase`?**
-When you edit files on the GitHub website AND locally, they get out of sync. `pull --rebase` fetches remote changes and places your local commits cleanly on top. Use it every time push is rejected with "fetch first" error.
+When you edit files on the GitHub website AND locally, they get out of sync. `pull --rebase` fetches remote changes and places your local commits on top. Use it every time push is rejected with "fetch first" error.
 
 ---
 
-## Interview Talking Points
+## Interview Q&A — 10 Questions
 
-**"Tell me about a complex SQL problem you solved"**
-Built a pharmacy pricing database modelling Optum's PULSE/Repricing ecosystem. Designed stored procedures for bid win rate analysis and price audit logging. Added a covering index on the Pricing table that eliminated a full table scan on the most common query — negotiated price lookup by product and customer.
+### Q1: "Tell me about yourself and why you're applying for this role."
 
-**"Describe your Python ETL experience"**
-Built an ETL pipeline using pandas and pyodbc that bulk-loads 100,000 transaction rows in 7 seconds. Includes data validation (null checks, duplicate detection) and structured logging. Uses `fast_executemany=True` for high-throughput bulk insert.
+I'm a data engineer with 2.5 years at Optum India — I built and maintained SQL Server data workflows, CI/CD pipelines with Jenkins and GitHub Actions, and automated testing frameworks. I completed an MSc in Data Science in January 2026 from MTU Cork. This Dublin role is a natural next step — I already understand the Optum business, I know the PULSE ecosystem, and I've been building directly against this JD. I want to be on the team modernising the Repricing Assistant.
 
-**"What is a covering index?"**
-A covering index includes all columns a query needs in the index itself — SQL Server never touches the base table. Example: `CREATE INDEX IX_Pricing_Cover ON Pricing(ProductID, CustomerID) INCLUDE(NegotiatedPrice, EffectiveDate, ExpiryDate)` — fully satisfied from the index, zero table scan.
+---
 
-**"What does the Streamlit dashboard do?"**
-It connects live to SQL Server and shows pricing KPIs, revenue by drug category, spend by customer tier, and a Repricing Simulator — select a product and customer, set a discount %, and it calculates the negotiated price in real time. Same concept as the PULSE Repricing Assistant.
+### Q2: "Walk me through your Healthcare Pricing project."
 
-**"What is the audit trigger for?"**
-Every price update to the Pricing table automatically captures old price, new price, and timestamp into PriceAuditLog — no manual logging needed. Full price change history for compliance and analytics.
+I built a SQL Server database modelling Optum's PULSE/Repricing system from scratch. It has 6 tables covering the full bid lifecycle — products, customers, bids, pricing, transactions, and an audit log. I wrote 5 stored procedures, added 12 indexes including a covering index on the Pricing table, created 3 analytical views, and built an audit trigger that automatically logs every price change. On top of that I built a Python ETL pipeline that loads 100,000 rows in 7 seconds, and a Streamlit dashboard with a live Repricing Simulator. Everything is on GitHub — I can share the link right now.
+
+---
+
+### Q3: "What is a covering index and when would you use one?"
+
+A covering index includes all the columns a query needs directly in the index — SQL Server never goes back to the base table. I used one on the Pricing table: `CREATE INDEX IX_Pricing_Cover ON Pricing(ProductID, CustomerID) INCLUDE(NegotiatedPrice, EffectiveDate, ExpiryDate)`. The most common query was looking up negotiated price by product and customer — with this index that query is fully satisfied from the index, eliminating the table scan entirely. I verified it using execution plans in SSMS.
+
+---
+
+### Q4: "Explain the difference between a clustered and non-clustered index."
+
+A clustered index determines the physical order of data in the table — one per table, usually the primary key. A non-clustered index is a separate structure pointing back to the data rows. In PricingDB every table has a clustered index on its primary key, and I added non-clustered indexes on all foreign key columns like ProductID and CustomerID in Transactions and Pricing to speed up JOIN operations.
+
+---
+
+### Q5: "What CI/CD experience do you have?"
+
+At Optum India I worked within Jenkins and GitHub CI/CD pipelines — automated testing and deployment across dev, test, stage, and production. I also contributed to a server decommission project processing 1,200+ requests using Jenkins and ServiceNow. For my projects I've set up GitHub Actions for automated testing on every push. The JD mentions GitHub Actions, Databricks, and Data Factory — I've worked with all three and I'm currently building an Azure Data Factory pipeline as Project 2.
+
+---
+
+### Q6: "How do you approach query optimisation in SQL Server?"
+
+First I identify the slow query using execution plans in SSMS — look for table scans and high cost operations. Then I check if the right indexes exist on JOIN and WHERE columns. If a query needs multiple columns, I consider a covering index to avoid key lookups. I also look at query structure — sometimes CTEs and subqueries can be rewritten as JOINs for better performance. In my pricing project I reduced a full table scan on Pricing to an index seek using a covering index — confirmed by the execution plan.
+
+---
+
+### Q7: "What is the difference between a view and a stored procedure?"
+
+A view is a saved SELECT query — no parameters, no logic, no side effects. You query it like a table. A stored procedure is a named block of SQL that accepts parameters, contains logic, and can perform INSERT/UPDATE/DELETE. In my project I used views for analytical reporting — `vw_MonthlyPricingSummary`, `vw_CustomerTierAnalysis` — and stored procedures for operational actions like `usp_UpdatePrice` which updates the price AND writes to the audit log in one atomic operation.
+
+---
+
+### Q8: "Tell me about a time you improved a process or workflow."
+
+At Optum India I was the sole tester for SmartDCOM. Developers were spending significant time on manual testing across 4 environments. I built an automated test suite using Selenium and TestNG covering 100+ user stories — cutting manual developer testing effort by approximately 40%. I documented the framework and handed it over so the whole team could run it. That's the approach I bring — find the inefficiency, automate it, document it.
+
+---
+
+### Q9: "How does your Python ETL pipeline handle data quality?"
+
+Before inserting any data, the pipeline runs two checks on every dataset: null check using `df.isnull().sum()` and duplicate check using `df.duplicated().sum()`. If issues are found they're logged as warnings and affected rows are dropped before insertion. Every step is logged to a file with timestamps — full audit trail of what was inserted, how many rows, and any quality issues. In the 100k row run it returned 0 nulls and 0 duplicates across all three tables.
+
+---
+
+### Q10: "Why Optum Dublin specifically?"
+
+I spent 2.5 years at Optum India — I understand the culture, the values, and how the organisation works. The Dublin Pricing team is doing something genuinely interesting: modernising the Repricing Assistant and integrating it into the PULSE ecosystem. That's not a generic data role — it's a specific technical problem I'm already familiar with and have been building against. I'm in Dublin, eligible to work without restrictions, and I want to grow in a team where I already understand the domain. This isn't a stepping stone — it's the role I've been preparing for.
 
 ---
 
