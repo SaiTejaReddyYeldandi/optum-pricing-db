@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import pyodbc
+import plotly.express as px
 
-st.set_page_config(page_title="Optum Pricing Dashboard", layout="wide")
-
+# --- DB Connection ---
 CONN_STR = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
     "SERVER=localhost;"
@@ -13,88 +12,99 @@ CONN_STR = (
 )
 
 @st.cache_data
-def run_query(sql):
+def get_data(query):
     conn = pyodbc.connect(CONN_STR)
-    df = pd.read_sql(sql, conn)
+    df = pd.read_sql(query, conn)
     conn.close()
     return df
 
-st.title("Optum Pharmacy Pricing Dashboard")
-st.markdown("PULSE / Repricing Assistant — Analytics View")
+st.set_page_config(page_title="Healthcare Pricing Dashboard", layout="wide")
+st.title("Healthcare Pricing Dashboard")
+st.caption("Pharmacy Pricing & Repricing System — Optum PULSE Ecosystem")
 
-# KPI row
+# --- KPIs ---
+total_txns = get_data("SELECT COUNT(*) AS cnt FROM Transactions").iloc[0]['cnt']
+total_revenue = get_data("SELECT SUM(Quantity * UnitPrice) AS rev FROM Transactions").iloc[0]['rev']
+total_products = get_data("SELECT COUNT(*) AS cnt FROM Products").iloc[0]['cnt']
+total_customers = get_data("SELECT COUNT(*) AS cnt FROM Customers").iloc[0]['cnt']
+
 col1, col2, col3, col4 = st.columns(4)
-total_txns  = run_query("SELECT COUNT(*) AS n FROM Transactions").iloc[0,0]
-total_rev   = run_query("SELECT SUM(Quantity*UnitPrice) AS n FROM Transactions").iloc[0,0]
-total_prods = run_query("SELECT COUNT(*) AS n FROM Products").iloc[0,0]
-total_custs = run_query("SELECT COUNT(*) AS n FROM Customers").iloc[0,0]
-
 col1.metric("Total Transactions", f"{total_txns:,}")
-col2.metric("Total Revenue", f"${total_rev:,.0f}")
-col3.metric("Products", total_prods)
-col4.metric("Customers", total_custs)
+col2.metric("Total Revenue", f"${total_revenue:,.0f}")
+col3.metric("Total Products", f"{total_products:,}")
+col4.metric("Total Customers", f"{total_customers:,}")
 
 st.divider()
 
-# Revenue by category
-col1, col2 = st.columns(2)
+# --- Charts ---
+col_left, col_right = st.columns(2)
 
-with col1:
+with col_left:
     st.subheader("Revenue by Category")
-    df = run_query("""
-        SELECT p.Category, SUM(t.Quantity * t.UnitPrice) AS Revenue
+    rev_data = get_data("""
+        SELECT p.Category, SUM(t.Quantity * t.UnitPrice) AS TotalRevenue
         FROM Transactions t JOIN Products p ON t.ProductID = p.ProductID
-        GROUP BY p.Category ORDER BY Revenue DESC
+        GROUP BY p.Category ORDER BY TotalRevenue DESC
     """)
-    fig = px.bar(df, x="Category", y="Revenue", color="Category")
-    st.plotly_chart(fig, use_container_width=True)
+    fig1 = px.bar(rev_data, x='Category', y='TotalRevenue',
+                  color='Category', title="Revenue by Drug Category")
+    st.plotly_chart(fig1, use_container_width=True)
 
-with col2:
+with col_right:
     st.subheader("Spend by Customer Tier")
-    df = run_query("""
+    tier_data = get_data("""
         SELECT c.Tier, SUM(t.Quantity * t.UnitPrice) AS TotalSpend
         FROM Transactions t JOIN Customers c ON t.CustomerID = c.CustomerID
         GROUP BY c.Tier
     """)
-    fig = px.pie(df, names="Tier", values="TotalSpend")
-    st.plotly_chart(fig, use_container_width=True)
+    fig2 = px.pie(tier_data, names='Tier', values='TotalSpend',
+                  title="Spend Distribution by Tier")
+    st.plotly_chart(fig2, use_container_width=True)
 
 st.divider()
 
-# Repricing Simulator
+# --- Repricing Simulator ---
 st.subheader("Repricing Simulator")
-st.markdown("Select a product and customer to calculate negotiated price")
+st.write("Select a product and customer to simulate negotiated pricing.")
 
-products = run_query("SELECT ProductID, ProductName, BasePrice FROM Products ORDER BY ProductName")
-customers = run_query("SELECT CustomerID, CustomerName, Tier FROM Customers ORDER BY CustomerName")
+products = get_data("SELECT ProductID, ProductName, BasePrice FROM Products ORDER BY ProductName")
+customers = get_data("SELECT CustomerID, CustomerName, Tier FROM Customers ORDER BY CustomerName")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    product = st.selectbox("Product", products["ProductName"].tolist())
-with col2:
-    customer = st.selectbox("Customer", customers["CustomerName"].tolist())
-with col3:
-    discount_pct = st.slider("Discount %", 0, 40, 10)
+col_a, col_b, col_c = st.columns(3)
 
-base_price = products[products["ProductName"] == product]["BasePrice"].values[0]
-new_price = round(base_price * (1 - discount_pct / 100), 2)
+with col_a:
+    selected_product = st.selectbox("Select Product",
+        options=products['ProductName'].tolist())
 
-st.metric("Base Price", f"${base_price}")
-st.metric("Negotiated Price", f"${new_price}", delta=f"-{discount_pct}%")
+with col_b:
+    selected_customer = st.selectbox("Select Customer",
+        options=customers['CustomerName'].tolist())
+
+with col_c:
+    discount_pct = st.slider("Discount %", min_value=0, max_value=50, value=10)
+
+base_price = products[products['ProductName'] == selected_product]['BasePrice'].values[0]
+negotiated_price = round(base_price * (1 - discount_pct / 100), 2)
+savings = round(base_price - negotiated_price, 2)
+
+r1, r2, r3 = st.columns(3)
+r1.metric("Base Price", f"${base_price}")
+r2.metric("Negotiated Price", f"${negotiated_price}", delta=f"-${savings}")
+r3.metric("Discount Savings", f"${savings}")
 
 st.divider()
 
-# Top transactions
+# --- Recent Transactions ---
 st.subheader("Recent Transactions")
-df = run_query("""
+recent = get_data("""
     SELECT TOP 20
         p.ProductName, c.CustomerName, c.Tier,
         t.Quantity, t.UnitPrice,
         t.Quantity * t.UnitPrice AS TotalValue,
-        CONVERT(VARCHAR, t.TxnDate, 23) AS TxnDate
+        t.TxnDate
     FROM Transactions t
     JOIN Products p ON t.ProductID = p.ProductID
     JOIN Customers c ON t.CustomerID = c.CustomerID
-    ORDER BY t.TxnDate DESC
+    ORDER BY t.TxnID DESC
 """)
-st.dataframe(df, use_container_width=True)
+st.dataframe(recent, use_container_width=True)
